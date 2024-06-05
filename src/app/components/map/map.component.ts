@@ -12,6 +12,8 @@ export class MapComponent implements OnInit {
   private markersData: { [key: string]: any } = {};
   private markers: { [key: string]: L.Marker } = {};
   private polylines: { [key: string]: L.Polyline } = {};
+  private fullPaths: { [key: string]: L.LatLng[] } = {};
+  private currentVisiblePolyline: string | null = null;
 
   constructor(private http: HttpClient) {}
 
@@ -53,6 +55,7 @@ export class MapComponent implements OnInit {
             previousLng: null,
             rotationAngle: 0
           };
+          this.addMarkerAndPolyline(this.markersData[plane.hex]);
         } else {
           const markerData = this.markersData[plane.hex];
           const previousLat = markerData.lat;
@@ -68,6 +71,22 @@ export class MapComponent implements OnInit {
     });
   }
 
+  private addMarkerAndPolyline(markerData: any): void {
+    const newLat = markerData.lat;
+    const newLng = markerData.lon;
+
+    const newMarker = L.marker([newLat, newLng], { icon: this.customIcon(0) });
+    newMarker.bindPopup(markerData.flight);
+    newMarker.addTo(this.map);
+    this.markers[markerData.hex] = newMarker;
+
+    const newPolyline = L.polyline([], { color: 'blue', opacity: 0 }).addTo(this.map);
+    this.polylines[markerData.hex] = newPolyline;
+    this.fullPaths[markerData.hex] = [new L.LatLng(newLat, newLng)];
+
+    newMarker.on('click', () => this.togglePolylineVisibility(markerData.hex));
+  }
+
   private updateMarker(markerData: any): void {
     const newLat = markerData.lat;
     const newLng = markerData.lon;
@@ -80,6 +99,9 @@ export class MapComponent implements OnInit {
     console.log(`Updating marker ${markerData.hex} to new position: ${newLat}, ${newLng}`);
 
     const marker = this.markers[markerData.hex];
+    const polyline = this.polylines[markerData.hex];
+    const fullPath = this.fullPaths[markerData.hex];
+
     if (marker) {
       const previousLat = markerData.previousLat;
       const previousLng = markerData.previousLng;
@@ -95,26 +117,23 @@ export class MapComponent implements OnInit {
       marker.setLatLng([newLat, newLng]);
       marker.setIcon(this.customIcon(markerData.rotationAngle));
 
-      const polyline = this.polylines[markerData.hex];
-      if (polyline) {
-        const latlngs = polyline.getLatLngs() as L.LatLng[];
-        latlngs.push(new L.LatLng(newLat, newLng));
-        polyline.setLatLngs(latlngs);
-      } else {
-        const newPolyline = L.polyline([new L.LatLng(newLat, newLng)], { color: 'blue' }).addTo(this.map);
-        this.polylines[markerData.hex] = newPolyline;
-      }
+      fullPath.push(new L.LatLng(newLat, newLng));
+      polyline.setLatLngs(fullPath);
+    }
+  }
+
+  private togglePolylineVisibility(hex: string): void {
+    // Tüm polylineleri gizle
+    Object.keys(this.polylines).forEach(key => {
+      this.polylines[key].setStyle({ opacity: 0 });
+    });
+
+    // Seçilen polyline'ı göster veya gizle
+    if (this.currentVisiblePolyline === hex) {
+      this.currentVisiblePolyline = null; // Aynı polyline'a tıklanırsa gizle
     } else {
-      const newMarker = L.marker([newLat, newLng], { icon: this.customIcon(0) });
-      newMarker.bindPopup(markerData.flight);
-      newMarker.addTo(this.map);
-      this.markers[markerData.hex] = newMarker;
-
-      const newPolyline = L.polyline([new L.LatLng(newLat, newLng)], { color: 'blue' }).addTo(this.map);
-      this.polylines[markerData.hex] = newPolyline;
-
-      markerData.previousLat = newLat;
-      markerData.previousLng = newLng;
+      this.currentVisiblePolyline = hex;
+      this.polylines[hex].setStyle({ opacity: 1 });
     }
   }
 
